@@ -1,0 +1,7 @@
+writable: true
+embeddings:
+  path: "Dmeta-embedding-zh"
+  content: "sqlite"
+  backend: "faiss"
+  sqlite:
+    path: "data"

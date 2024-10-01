@@ -1,0 +1,22 @@
+{
+  "path": "Dmeta-embedding-zh",
+  "content": "sqlite",
+  "backend": "faiss",
+  "sqlite": {
+    "path": "data"
+  },
+  "dimensions": 768,
+  "offset": 0,
+  "build": {
+    "create": "2024-09-30T11:42:38Z",
+    "python": "3.12.6",
+    "settings": {
+      "components": "IDMap,Flat"
+    },
+    "system": "Windows (AMD64)",
+    "txtai": "7.4.0"
+  },
+  "update": "2024-09-30T11:42:38Z",
+  "format": "json",
+  "autoid": 1
+}
