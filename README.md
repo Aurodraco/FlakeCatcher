@@ -32,9 +32,13 @@
 
 1. 准备好python环境，克隆项目到本地
 
-2. 下载用到的[向量模型](https://huggingface.co/DMetaSoul/Dmeta-embedding-zh)，保存在项目根目录下，并命名为`Dmeta-embedding-zh`
+```
+git clone https://github.com/Aurodraco/FlakeCatcher.git
+```
 
-3. 项目采用poetry管理，代码量少且简单，基本上不需要编程基础就能阅读和修改，你可以根据自己的喜好做出修改
+3. 下载用到的[向量模型](https://huggingface.co/DMetaSoul/Dmeta-embedding-zh)，保存在项目根目录下，并命名为`Dmeta-embedding-zh`
+
+4. 项目采用poetry管理，代码量少且简单，基本上不需要编程基础就能阅读和修改，你可以根据自己的喜好做出修改
 
 ### 作者
 
@@ -42,4 +46,4 @@ Bilibili: 肆星Auro
 
 ### 版权说明
 
-该项目签署了MIT 授权许可，详情请参阅 LICENSE.txt
+该项目签署了MIT 授权许可，详情请参阅[LICENSE](https://github.com/Aurodraco/FlakeCatcher/blob/main/LICENSE)
