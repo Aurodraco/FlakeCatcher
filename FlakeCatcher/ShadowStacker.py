@@ -8,7 +8,7 @@ class ShadowStacker(QTextEdit):
 
     exportCurrentContentSignal = Signal()
     exportEntireContentSignal = Signal()
-    removeLineSignal = Signal()
+    removeContentSignal = Signal()
     setPreferenceSignal = Signal()
 
     def __init__(self, parent=None):
@@ -26,9 +26,9 @@ class ShadowStacker(QTextEdit):
         exportEntireContent.triggered.connect(self.emitExportEntireContent)
         menu.addAction(exportEntireContent)
 
-        removeLine = QAction("删除特定行内容", self)
-        removeLine.triggered.connect(self.emitRemoveLine)
-        menu.addAction(removeLine)
+        removeContent = QAction("删除特定内容", self)
+        removeContent.triggered.connect(self.emitRemoveContent)
+        menu.addAction(removeContent)
 
         menu.addSeparator()
 
@@ -48,5 +48,5 @@ class ShadowStacker(QTextEdit):
     def emitSetPreference(self):
         self.setPreferenceSignal.emit()
 
-    def emitRemoveLine(self):
-        self.removeLineSignal.emit()
+    def emitRemoveContent(self):
+        self.removeContentSignal.emit()

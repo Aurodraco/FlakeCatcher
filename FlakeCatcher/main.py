@@ -6,10 +6,10 @@ from PySide6.QtWidgets import (
     QFontDialog,
     QInputDialog,
 )
-from PySide6.QtCore import Qt, QEvent, Slot
+from PySide6.QtCore import Qt, QEvent, Slot, QTimer
 from PySide6.QtGui import QTextCursor, QFontDatabase, QFont, QTextBlockFormat, QIcon
 from FlakeCatcher.Ui_MainWindow import Ui_MainWindow
-from FlakeCatcher.Ui_PreferenceDialog import Ui_Form
+from FlakeCatcher.Ui_PreferenceDialog import Ui_PreferenceDialog
 import uuid
 import math
 from pathlib import Path
@@ -29,11 +29,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.textEdit.cursorPositionChanged.connect(self.cursorChanged)
         self.textEdit.textChanged.connect(self.textChanged)
         self.textEdit.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        self.shadowStacker.exportCurrentContentSignal.connect(
-            self.exportCurrentContent)
-        self.shadowStacker.exportEntireContentSignal.connect(
-            self.exportEntireContent)
-        self.shadowStacker.removeLineSignal.connect(self.removeLine)
+        self.shadowStacker.exportCurrentContentSignal.connect(self.exportCurrentContent)
+        self.shadowStacker.exportEntireContentSignal.connect(self.exportEntireContent)
+        self.shadowStacker.removeContentSignal.connect(self.removeContent)
         self.shadowStacker.setPreferenceSignal.connect(self.setPreference)
         self.shadowStacker.setReadOnly(True)
 
@@ -45,6 +43,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 连接模型和数据库
         embeddingApp = Application("embeddings.yml")
         self.embeddings = embeddingApp.embeddings
+        # 此处为了保证数据的唯一性，并没有检测路径是否存在并生成新数据库
+        # 而是直接使用相对路径中已有的空数据库
         self.embeddings.load("data")
         self.database = self.embeddings.database
 
@@ -54,30 +54,37 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 在文本框添加事件过滤器，检测特定的按键是否被按下并触发相关方法
         self.textEdit.installEventFilter(self)
 
+        # 用于消除抖动的计时器
+        self.timer = QTimer()
+        self.timer.setSingleShot(True)
+
     def eventFilter(self, obj, event):
         # 检测和处理文本框的按键事件
         if obj is self.textEdit and event.type() == QEvent.Type.KeyPress:
-            # 如果按下回车，则增加一行数据
-            if event.key() == Qt.Key.Key_Return or event.key(
-            ) == Qt.Key.Key_Enter:
-                self.insertLine()
+            # 如果按下回车，并且当前设置为换行时保存当前行，则增加一行数据
+            if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+                if self.newlineSave:
+                    self.insertLine()
                 return False
             # 如果按下Ctrl + up，并且光标在文本框开头，则再读取一行数据
             if (event.key() == Qt.Key.Key_Up) and (
-                    event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            ):
                 if self.textEdit.textCursor().atStart():
                     self.readLineFromSqlite()
                 return False
             # 如果按下ctrl + S，则保存需要保存的文本
             if (event.key() == Qt.Key.Key_S) and (
-                    event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            ):
                 self.insertDocument()
                 return False
 
         if obj is self.textEdit and event.type() == QEvent.Type.KeyRelease:
             # 如果按下ctrl + V，则在文本更新后保存需要保存的文本
             if (event.key() == Qt.Key.Key_V) and (
-                    event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            ):
                 self.insertDocument()
                 return False
 
@@ -110,8 +117,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             blockFormat = block.blockFormat()
             if not math.isclose(blockFormat.bottomMargin(), 10.0):
                 blockFormat.setLineHeight(
-                    120,
-                    QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+                    120, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value
+                )
                 blockFormat.setBottomMargin(10.0)
                 cursor.mergeBlockFormat(blockFormat)
             else:
@@ -126,13 +133,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 向数据库中插入当前行（block）
         currentBlockNumber = self.textEdit.textCursor().blockNumber()
         # 此时光标还没有换行
-        text = (self.textEdit.document().findBlockByNumber(
-            currentBlockNumber).text().strip())
+        text = (
+            self.textEdit.document()
+            .findBlockByNumber(currentBlockNumber)
+            .text()
+            .strip()
+        )
 
         if text != "":
             cursor = self.getDatabaseCursor()
-            cursor.execute("select 1 from sections where text = ? limit 1",
-                           (text, ))
+            cursor.execute("select 1 from sections where text = ? limit 1", (text,))
             if cursor.fetchone() is None:
                 id = str(uuid.uuid4())
                 doc = [(id, text, None)]
@@ -160,8 +170,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for line in lines:
             text = line.strip()
             if text != "":
-                cursor.execute("select 1 from sections where text = ? limit 1",
-                               (text, ))
+                cursor.execute("select 1 from sections where text = ? limit 1", (text,))
                 if cursor.fetchone() is None:
                     id = str(uuid.uuid4())
                     doc = [(id, text, None)]
@@ -175,7 +184,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 将时间顺序作为查找前一行的依据，显然查询的是打开文本框之前的数据
         cursor.execute(
             "select * from sections where entry < ? order by entry DESC limit 1",
-            (self.firstLineTime, ),
+            (self.firstLineTime,),
         )
         result = cursor.fetchone()
         if result is not None:
@@ -193,8 +202,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def exportCurrentContent(self):
         # 导出当前文本框内容
         filename, _ = QFileDialog.getSaveFileName(
-            self, "保存文件", "untitled.txt",
-            "Text Files (*.txt *.md);;All Files (*)")
+            self, "保存文件", "untitled.txt", "Text Files (*.txt *.md);;All Files (*)"
+        )
 
         if filename:
             content = self.textEdit.toPlainText()
@@ -205,7 +214,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def exportEntireContent(self):
         # 导出全部内容
         filename, _ = QFileDialog.getSaveFileName(
-            self, "保存文件", "雪花捕手.txt", "Text Files (*.txt *.md);;All Files (*)")
+            self, "保存文件", "雪花捕手.txt", "Text Files (*.txt *.md);;All Files (*)"
+        )
 
         if filename:
             cursor = self.getDatabaseCursor()
@@ -218,19 +228,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 file.write(content)
 
     @Slot()
-    def removeLine(self):
+    def removeContent(self):
 
-        text, ok = QInputDialog.getText(self, "删除特定行内容", "请输入要删除的单行文本:")
+        text, ok = QInputDialog.getMultiLineText(
+            self, "删除特定内容", "请输入要删除的文本:"
+        )
 
         cursor = self.getDatabaseCursor()
-        cursor.execute("select id from sections where text = ? limit 1",
-                       (text, ))
-        id = cursor.fetchone()
-        if id is not None:
-            self.embeddings.delete([id[0]])
-            self.embeddings.save("data")
-        else:
-            pass
+        lines = str.splitlines(text)
+
+        for line in lines:
+            line = line.strip()
+            cursor.execute("select id from sections where text = ? limit 1", (line,))
+            id = cursor.fetchone()
+            if id is not None:
+                self.embeddings.delete([id[0]])
+                self.embeddings.save("data")
+            else:
+                pass
 
     @Slot()
     def setPreference(self):
@@ -244,8 +259,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.preferenceDialog.selectFontButton.clicked.connect(self.selectFont)
 
         # 修改显示条数和风格需要确认
-        self.preferenceDialog.confirmButton.clicked.connect(
-            self.confirmPreference)
+        self.preferenceDialog.confirmButton.clicked.connect(self.confirmPreference)
+
+        if self.preferenceTheme == "light":
+            self.preferenceDialog.checkLightStyle.setChecked(True)
+        else:
+            self.preferenceDialog.checkDarkStyle.setChecked(True)
+
+        self.preferenceDialog.checkBox.setChecked(self.newlineSave)
 
         self.preferenceDialog.exec()
 
@@ -260,11 +281,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.preferenceTheme != "light":
                 apply_stylesheet(app, theme="light_blue.xml")
                 self.loadFont("black")
+                self.preferenceTheme = "light"
         else:
             self.config.set("Preference", "theme", "dark")
             if self.preferenceTheme != "dark":
                 apply_stylesheet(app, theme="dark_teal.xml")
                 self.loadFont("white")
+                self.preferenceTheme = "dark"
+
+        self.newlineSave = self.preferenceDialog.checkBox.isChecked()
+        self.config.set("Preference", "newline_save", str(self.newlineSave))
 
         with open("config.ini", "w", encoding="utf-8") as configFile:
             self.config.write(configFile)
@@ -274,10 +300,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     @Slot()
     def selectFont(self):
         # 选择字体
-        qFontDialog = QFontDialog()
-        ok, font = qFontDialog.getFont()
 
-        if ok:
+        # 消除抖动
+        if self.timer.isActive():
+            return
+
+        qFontDialog = QFontDialog()
+        qFontDialog.resize(800, 600)
+        ok = qFontDialog.exec()
+        font = qFontDialog.selectedFont()
+
+        if ok == QDialog.DialogCode.Accepted:
             self.config.set("Preference", "font", font.toString())
             self.config.set("Preference", "font_size", str(font.pointSize()))
 
@@ -291,27 +324,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.shadowStacker.setStyleSheet(
                 f"font-family: {font.family()}; font-size: {pointSize}; font-style: {font.styleName()}; color: {self.fontColor};"
             )
-            self.preferenceDialog.fontEdit.setText(",".join(
-                font.toString().split(",")[:2]))
+            self.preferenceDialog.fontEdit.setText(
+                ",".join(font.toString().split(",")[:2])
+            )
+
+        self.timer.start(500)
 
     def loadPreference(self):
         # 读取已有设置
         self.config.read("config.ini", encoding="utf-8")
 
-        self.preferenceTheme = self.config.get("Preference",
-                                               "theme",
-                                               fallback="dark")
-        self.displayCount = self.config.getint("Preference",
-                                               "display_count",
-                                               fallback=5)
+        self.preferenceTheme = self.config.get("Preference", "theme", fallback="dark")
+        self.displayCount = self.config.getint(
+            "Preference", "display_count", fallback=5
+        )
+        self.newlineSave = self.config.getboolean(
+            "Preference", "newline_save", fallback=False
+        )
 
         self.preferenceDialog.horizontalSlider.setValue(self.displayCount)
 
     def loadFont(self, color):
         # 加载字体，直接设置到样式表
-        font = self.config.get("Preference",
-                               "font",
-                               fallback="WenQuanYi Micro Hei Mono")
+        font = self.config.get(
+            "Preference", "font", fallback="WenQuanYi Micro Hei Mono"
+        )
         fontSize = self.config.getint("Preference", "font_size", fallback=16)
         if font.partition(",")[0] == "WenQuanYi Micro Hei Mono":
             fontPath = "resource/WenQuanYi Micro Hei Mono.ttf"
@@ -323,7 +360,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             font = QFont(font, fontSize)
 
         self.preferenceDialog.fontEdit.setText(
-            font.toString().partition(",")[0] + "," + str(fontSize))
+            font.toString().partition(",")[0] + "," + str(fontSize)
+        )
 
         pointSize = f"{font.pointSize()}pt"
         self.textEdit.setStyleSheet(
@@ -339,7 +377,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.insertDocument()
 
 
-class PreferenceDialog(QDialog, Ui_Form):
+class PreferenceDialog(QDialog, Ui_PreferenceDialog):
 
     def __init__(self):
         super().__init__()
